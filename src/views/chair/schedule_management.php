@@ -917,7 +917,9 @@ if ($userDepartmentId) {
                                 <option value="<?php echo htmlspecialchars($course['course_code']); ?>"
                                     data-name="<?php echo htmlspecialchars($course['course_name']); ?>"
                                     data-year-level="<?php echo htmlspecialchars($course['curriculum_year']); ?>"
-                                    data-course-id="<?php echo htmlspecialchars($course['course_id']); ?>">
+                                    data-course-id="<?php echo htmlspecialchars($course['course_id']); ?>"
+                                    data-curriculum="<?php echo htmlspecialchars($course['curriculum_name'] ?? ''); ?>"
+                                    data-curriculum-status="<?php echo htmlspecialchars($course['curriculum_status'] ?? 'Active'); ?>">
                                 <?php endforeach; ?>
                         </datalist>
                     </div>
@@ -2828,7 +2830,7 @@ if ($userDepartmentId) {
                     // You can show a notification or update the UI
                     console.log('Incomplete schedules detected:', unassignedCourses);
                 }
-                }
+            }
 
             // Helper function to get consistent color for a schedule
             function getScheduleColor(schedule) {
