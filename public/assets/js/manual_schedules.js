@@ -943,16 +943,6 @@ document.addEventListener("click", function (event) {
   }
 });
 
-function formatTime(timeString) {
-  if (!timeString) return "";
-  const [hours, minutes] = timeString.split(":");
-  const date = new Date(2000, 0, 1, hours, minutes);
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
 
 function showNotification(message, type = "success", duration = 5000) {
   const existingNotification = document.getElementById("notification");
@@ -1704,18 +1694,7 @@ function openAddModal() {
   console.log("=== END OPEN ADD MODAL DEBUG ===");
 }
 
-function openAddModalForSlot(day, startTime, endTime) {
-  console.log("Opening add modal for slot:", day, startTime, endTime);
-  openAddModal();
 
-  document.getElementById("modal-day").value = day;
-  document.getElementById("modal-start-time").value = startTime;
-  document.getElementById("modal-end-time").value = endTime;
-
-  document.getElementById("day-select").value = day;
-  document.getElementById("start-time").value = startTime;
-  document.getElementById("end-time").value = endTime;
-}
 
 function editSchedule(scheduleId) {
   console.log("=== EDIT SCHEDULE DEBUG ===");
@@ -2387,6 +2366,8 @@ function updateManualGrid(schedules) {
   const manualGrid = document.getElementById("schedule-grid");
   if (!manualGrid) return;
 
+  syncGridWithSchedules(schedules);
+
   manualGrid.innerHTML = "";
 
   // Generate dynamic time slots (same as PHP)
@@ -2587,7 +2568,7 @@ function updateViewGrid(schedules) {
 
   viewGrid.innerHTML = '';
 
-  const timeSlots = generateTimeSlots();
+  const timeSlots = generateDynamicTimeSlots();
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
   // Pre-process schedules for view grid
@@ -2705,4 +2686,127 @@ function openAddModalForSlot(day, startTime, endTime) {
   // Set the specific end time
   document.getElementById("end-time").value = endTime;
   updateTimeFields();
+}
+
+
+// Enhanced dynamic grid generation
+function generateDynamicTimeSlots() {
+  const timeSlots = [];
+  const startHour = 7; // 7:00 AM
+  const endHour = 21;  // 9:00 PM
+
+  for (let hour = startHour; hour < endHour; hour++) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      const currentTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      const nextHour = hour + (minute + 30 >= 60 ? 1 : 0);
+      const nextMinute = (minute + 30) % 60;
+
+      if (nextHour >= endHour && nextMinute > 0) continue;
+
+      const nextTime = `${nextHour.toString().padStart(2, '0')}:${nextMinute.toString().padStart(2, '0')}`;
+      timeSlots.push([currentTime, nextTime]);
+    }
+  }
+  return timeSlots;
+}
+
+// Enhanced grid synchronization
+function syncGridWithSchedules(schedules) {
+  const grid = document.getElementById('schedule-grid');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+  const timeSlots = generateDynamicTimeSlots();
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  // Pre-process schedules for faster lookup
+  const scheduleLookup = {};
+  schedules.forEach(schedule => {
+    const day = schedule.day_of_week;
+    const start = schedule.start_time ? schedule.start_time.substring(0, 5) : '';
+    const end = schedule.end_time ? schedule.end_time.substring(0, 5) : '';
+
+    if (!scheduleLookup[day]) {
+      scheduleLookup[day] = [];
+    }
+
+    scheduleLookup[day].push({
+      schedule: schedule,
+      start: start,
+      end: end
+    });
+  });
+
+  timeSlots.forEach(time => {
+    const duration = (new Date(`2000-01-01 ${time[1]}`) - new Date(`2000-01-01 ${time[0]}`)) / 1000;
+    const rowSpan = Math.max(1, duration / 1800); // 30-minute base unit
+    const minHeight = rowSpan * 60;
+
+    const row = document.createElement('div');
+    row.className = `grid grid-cols-8 min-h-[${minHeight}px] hover:bg-gray-50 transition-colors duration-200`;
+    row.style.gridRow = `span ${rowSpan}`;
+
+    // Time cell
+    const timeCell = document.createElement('div');
+    timeCell.className = 'px-3 py-3 text-sm font-medium text-gray-600 border-r border-gray-200 bg-gray-50 sticky left-0 z-10 flex items-start';
+    timeCell.style.gridRow = `span ${rowSpan}`;
+    timeCell.innerHTML = `
+            <span class="text-sm hidden sm:block">${formatTime(time[0])} - ${formatTime(time[1])}</span>
+            <span class="text-xs sm:hidden">${time[0].substring(0, 5)}-${time[1].substring(0, 5)}</span>
+        `;
+    row.appendChild(timeCell);
+
+    // Day cells
+    days.forEach(day => {
+      const cell = document.createElement('div');
+      cell.className = `px-1 py-1 border-r border-gray-200 last:border-r-0 relative drop-zone min-h-[${minHeight}px]`;
+      cell.dataset.day = day;
+      cell.dataset.startTime = time[0];
+      cell.dataset.endTime = time[1];
+
+      const schedulesInSlot = [];
+      if (scheduleLookup[day]) {
+        scheduleLookup[day].forEach(scheduleData => {
+          const scheduleStart = scheduleData.start;
+          const scheduleEnd = scheduleData.end;
+
+          const slotStart = new Date(`2000-01-01 ${time[0]}`).getTime();
+          const slotEnd = new Date(`2000-01-01 ${time[1]}`).getTime();
+          const schedStart = new Date(`2000-01-01 ${scheduleStart}`).getTime();
+          const schedEnd = new Date(`2000-01-01 ${scheduleEnd}`).getTime();
+
+          if (schedStart < slotEnd && schedEnd > slotStart) {
+            schedulesInSlot.push({
+              schedule: scheduleData.schedule,
+              isStartCell: (scheduleStart === time[0])
+            });
+          }
+        });
+      }
+
+      if (schedulesInSlot.length === 0) {
+        const addButton = document.createElement('button');
+        addButton.innerHTML = '<i class="fas fa-plus text-xs"></i>';
+        addButton.className = 'w-full h-full text-gray-400 hover:text-gray-600 hover:bg-yellow-50 rounded-lg border-2 border-dashed border-gray-300 hover:border-yellow-400 transition-all duration-200 no-print flex items-center justify-center p-1';
+        addButton.onclick = () => openAddModalForSlot(day, time[0], time[1]);
+        cell.appendChild(addButton);
+      } else {
+        const container = document.createElement('div');
+        container.className = 'space-y-1 p-1';
+
+        schedulesInSlot.forEach(scheduleData => {
+          const scheduleCard = createDynamicScheduleCard(scheduleData.schedule, scheduleData.isStartCell);
+          container.appendChild(scheduleCard);
+        });
+
+        cell.appendChild(container);
+      }
+
+      row.appendChild(cell);
+    });
+
+    grid.appendChild(row);
+  });
+
+  initializeDragAndDrop();
 }
