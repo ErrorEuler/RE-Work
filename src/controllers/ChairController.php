@@ -926,45 +926,9 @@ class ChairController extends BaseController
 
     private function getCurricula($departmentId)
     {
-        try {
-            error_log("getCurricula: Querying for department_id=$departmentId");
-
-            $stmt = $this->db->prepare("
-            SELECT 
-                curriculum_id, 
-                curriculum_name, 
-                status,
-                total_units,
-                created_at
-            FROM curricula 
-            WHERE department_id = :dept_id
-            ORDER BY 
-                CASE status 
-                    WHEN 'Active' THEN 1 
-                    ELSE 2 
-                END,
-                created_at DESC
-        ");
-
-            $stmt->execute([':dept_id' => $departmentId]);
-            $curricula = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            error_log("getCurricula: Found " . count($curricula) . " curricula for department $departmentId");
-
-            if (count($curricula) > 0) {
-                foreach ($curricula as $curriculum) {
-                    $status = $curriculum['status'] ?? 'Unknown';
-                    error_log("getCurricula:   - {$curriculum['curriculum_name']} (ID: {$curriculum['curriculum_id']}, Status: $status)");
-                }
-            } else {
-                error_log("getCurricula: ⚠️ No curricula found for department $departmentId");
-            }
-
-            return $curricula;
-        } catch (PDOException $e) {
-            error_log("getCurricula: Error - " . $e->getMessage());
-            return [];
-        }
+        $stmt = $this->db->prepare("SELECT curriculum_id, curriculum_name FROM curricula WHERE department_id = :dept_id AND status = 'Active'");
+        $stmt->execute([':dept_id' => $departmentId]);
+        return $stmt->fetchAll();
     }
 
     private function getClassrooms($departmentId)
@@ -2108,65 +2072,12 @@ class ChairController extends BaseController
 
             $sections = $cachedData['sections'];
 
-            // ============================================================
-            // FIX: Load ALL courses from ALL ACTIVE curricula
-            // ============================================================
+            // FIX: Load curriculum courses for manual scheduling
             $curriculumCourses = [];
-
             if (!empty($curricula)) {
-                error_log("manageSchedule: Found " . count($curricula) . " curricula to process");
-
-                foreach ($curricula as $curriculum) {
-                    // ✅ FIX: Check status properly with default fallback
-                    $curriculumStatus = $curriculum['status'] ?? 'Active';
-
-                    error_log("manageSchedule: Processing curriculum '{$curriculum['curriculum_name']}' (ID: {$curriculum['curriculum_id']}, Status: $curriculumStatus)");
-
-                    if ($curriculumStatus === 'Active') {
-                        // Get ALL courses from this curriculum (not filtered by semester)
-                        $courses = $this->getAllCurriculumCourses($curriculum['curriculum_id']);
-
-                        error_log("manageSchedule: Retrieved " . count($courses) . " courses from curriculum '{$curriculum['curriculum_name']}'");
-
-                        if (count($courses) > 0) {
-                            error_log("manageSchedule: Sample course: " . json_encode($courses[0]));
-                        }
-
-                        foreach ($courses as $course) {
-                            // Add curriculum info to each course
-                            $course['curriculum_name'] = $curriculum['curriculum_name'];
-                            $course['curriculum_id'] = $curriculum['curriculum_id'];
-                            $course['curriculum_status'] = $curriculumStatus;
-                            $curriculumCourses[] = $course;
-                        }
-
-                        error_log("manageSchedule: Added " . count($courses) . " courses from active curriculum: " . $curriculum['curriculum_name']);
-                    } else {
-                        error_log("manageSchedule: Skipping inactive curriculum: " . $curriculum['curriculum_name'] . " (Status: $curriculumStatus)");
-                    }
-                }
-
-                error_log("manageSchedule: ✅ Total courses from all active curricula: " . count($curriculumCourses));
-
-                if (count($curriculumCourses) > 0) {
-                    error_log("manageSchedule: Sample curriculum course: " . json_encode($curriculumCourses[0]));
-
-                    // Group by curriculum for logging
-                    $coursesByCurriculum = [];
-                    foreach ($curriculumCourses as $course) {
-                        $currName = $course['curriculum_name'] ?? 'Unknown';
-                        if (!isset($coursesByCurriculum[$currName])) {
-                            $coursesByCurriculum[$currName] = 0;
-                        }
-                        $coursesByCurriculum[$currName]++;
-                    }
-
-                    error_log("manageSchedule: Courses by curriculum: " . json_encode($coursesByCurriculum));
-                } else {
-                    error_log("⚠️ manageSchedule: No courses found in any active curriculum!");
-                }
-            } else {
-                error_log("⚠️ manageSchedule: No curricula found for department $departmentId");
+                $firstCurriculumId = $curricula[0]['curriculum_id'];
+                $curriculumCourses = $this->getCurriculumCourses($firstCurriculumId);
+                error_log("manageSchedule: Loaded " . count($curriculumCourses) . " courses for curriculum $firstCurriculumId");
             }
 
             $jsData = [
@@ -2175,10 +2086,10 @@ class ChairController extends BaseController
                 'currentSemester' => $currentSemester,
                 'sectionsData' => $this->getSections($departmentId, $currentSemester['semester_id']),
                 'currentAcademicYear' => $currentSemester['academic_year'] ?? '',
-                'faculty' => $faculty,
+                'faculty' => $faculty, // ✅ Use fresh faculty data
                 'classrooms' => $classrooms,
                 'curricula' => $curricula,
-                'curriculumCourses' => $curriculumCourses, // ✅ This is now properly populated
+                'curriculumCourses' => $curriculumCourses,
                 'schedules' => $schedules
             ];
         } else {
@@ -2201,79 +2112,6 @@ class ChairController extends BaseController
         require_once __DIR__ . '/../views/chair/schedule_management.php';
     }
 
-    private function getAllCurriculumCourses($curriculumId)
-    {
-        if (!$curriculumId) {
-            error_log("getAllCurriculumCourses: No curriculum_id provided");
-            return [];
-        }
-
-        try {
-            error_log("getAllCurriculumCourses: Querying for curriculum_id=$curriculumId");
-
-            $stmt = $this->db->prepare("    
-            SELECT 
-                c.course_id, 
-                c.course_code, 
-                c.units, 
-                c.lecture_units, 
-                c.lab_units, 
-                c.lab_hours, 
-                c.lecture_hours, 
-                c.course_name, 
-                cc.subject_type, 
-                cc.year_level AS curriculum_year, 
-                cc.curriculum_id, 
-                cc.semester AS curriculum_semester,
-                cr.curriculum_id,
-                cr.curriculum_name,
-                cr.status as curriculum_status
-            FROM curriculum_courses cc 
-            JOIN courses c ON cc.course_id = c.course_id 
-            JOIN curricula cr ON cc.curriculum_id = cr.curriculum_id 
-            WHERE cc.curriculum_id = :curriculum_id 
-            AND cr.status = 'Active' 
-            ORDER BY 
-                FIELD(cc.year_level, '1st Year', '2nd Year', '3rd Year', '4th Year'), 
-                FIELD(cc.semester, '1st', '2nd', 'Mid Year'), 
-                c.course_code
-        ");
-
-            $stmt->execute([':curriculum_id' => $curriculumId]);
-            $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            error_log("getAllCurriculumCourses: Retrieved " . count($courses) . " courses for curriculum_id=$curriculumId");
-
-            if (count($courses) > 0) {
-                error_log("getAllCurriculumCourses: Sample course: " . json_encode($courses[0]));
-            } else {
-                error_log("getAllCurriculumCourses: ⚠️ No courses found for curriculum_id=$curriculumId");
-
-                // Debug: Check if curriculum exists
-                $checkStmt = $this->db->prepare("SELECT curriculum_name, status FROM curricula WHERE curriculum_id = :curriculum_id");
-                $checkStmt->execute([':curriculum_id' => $curriculumId]);
-                $currInfo = $checkStmt->fetch(PDO::FETCH_ASSOC);
-
-                if ($currInfo) {
-                    error_log("getAllCurriculumCourses: Curriculum exists: {$currInfo['curriculum_name']} (Status: {$currInfo['status']})");
-
-                    // Check if there are ANY courses in curriculum_courses
-                    $countStmt = $this->db->prepare("SELECT COUNT(*) FROM curriculum_courses WHERE curriculum_id = :curriculum_id");
-                    $countStmt->execute([':curriculum_id' => $curriculumId]);
-                    $courseCount = $countStmt->fetchColumn();
-                    error_log("getAllCurriculumCourses: Found $courseCount course entries in curriculum_courses table");
-                } else {
-                    error_log("getAllCurriculumCourses: ⚠️ Curriculum with ID $curriculumId does not exist!");
-                }
-            }
-
-            return $courses;
-        } catch (PDOException $e) {
-            error_log("getAllCurriculumCourses: PDO Error - " . $e->getMessage());
-            error_log("getAllCurriculumCourses: SQL State: " . $e->getCode());
-            return [];
-        }
-    }
     public function generateSchedulesAjax()
     {
         header('Content-Type: application/json');
@@ -2928,7 +2766,7 @@ class ChairController extends BaseController
                     break;
                 }
             }
-
+            
             foreach ($facultyAssignments as $facultyId => $assignments) {
                 if (is_array($assignments)) {
                     $totalUnits = array_sum(array_column($assignments, 'units'));
@@ -3989,7 +3827,7 @@ class ChairController extends BaseController
         $subjectType = $courseDetails['subject_type'] ?? 'General Education';
         $courseUnits = $courseDetails['units'] ?? 3;
 
-
+        
 
         // Log faculty specializations for debugging
         $facultyWithSpecialization = 0;
@@ -4423,6 +4261,7 @@ class ChairController extends BaseController
                 }
             }
         }
+
     }
 
     private function analyzeWorkloadDistribution($facultyAssignments, $facultySpecializations)
@@ -6599,13 +6438,6 @@ class ChairController extends BaseController
         }
     }
 
-
-
-
-
-
-
-
     public function classroom()
     {
         $this->requireAnyRole('chair', 'dean');
@@ -6885,7 +6717,7 @@ class ChairController extends BaseController
                         echo json_encode($response);
                         exit;
                         break;
-
+                        
                     case 'add':
                         try {
                             if (!$departmentId) {
@@ -8680,7 +8512,7 @@ class ChairController extends BaseController
                     AND department_id = ?
                 ");
                     $toggleParams = [$courseId, $departmentId];
-
+                   
                     $toggleStmt->execute($toggleParams);
                     if ($toggleStmt->rowCount() > 0) {
                         $newStatus = !$currentStatus;
@@ -8707,7 +8539,7 @@ class ChairController extends BaseController
                     AND c.department_id = ?
                 ");
                     $editParams = [$courseId, $departmentId];
-
+                  
                     $editStmt->execute($editParams);
                     $editCourse = $editStmt->fetch(PDO::FETCH_ASSOC);
                     if (!$editCourse) {
@@ -8730,11 +8562,13 @@ class ChairController extends BaseController
                 }
 
                 $totalStmt = $this->db->prepare($totalQuery);
-
+               
                 $totalStmt->execute($totalParams);
                 $result = $totalStmt->fetch(PDO::FETCH_ASSOC);
                 $totalCourses = $result['total'] ?? 0;
                 $totalPages = max(1, ceil($totalCourses / $perPage));
+
+               
             } catch (PDOException $e) {
                 error_log("Error counting courses: " . $e->getMessage());
                 $error = "Failed to count courses: " . $e->getMessage();
@@ -8861,7 +8695,7 @@ class ChairController extends BaseController
                 echo json_encode(['error' => 'No department assigned']);
                 exit;
             }
-
+    
             $collegeStmt = $this->db->prepare("SELECT college_id FROM departments WHERE department_id = :department_id");
             $collegeStmt->execute([':department_id' => $departmentId]);
             $collegeId = $collegeStmt->fetchColumn();
@@ -8872,10 +8706,10 @@ class ChairController extends BaseController
                 echo json_encode(['error' => 'No college assigned']);
                 exit;
             }
-
+           
 
             $name = isset($_POST['name']) ? trim($_POST['name']) : '';
-
+           
             if (empty($name)) {
                 error_log("search: No name provided");
                 header('Content-Type: application/json');
@@ -8926,7 +8760,7 @@ class ChairController extends BaseController
                 ':name3' => "%$name%"
             ];
 
-
+           
             $stmt = $this->db->prepare($query);
             if (!$stmt) {
                 $errorInfo = $this->db->errorInfo();
@@ -8988,16 +8822,16 @@ class ChairController extends BaseController
                 ':name3' => "%$name%"
             ];
 
-
+           
             $includableStmt = $this->db->prepare($includableQuery);
             if (!$includableStmt) {
                 $errorInfo = $this->db->errorInfo();
-
+                
                 throw new Exception("Failed to prepare includable statement: " . $errorInfo[2]);
             }
             $includableStmt->execute($includableParams);
             $includableResults = $includableStmt->fetchAll(PDO::FETCH_ASSOC);
-
+       
             header('Content-Type: application/json');
             echo json_encode(['results' => $results, 'includable' => $includableResults]);
             exit;

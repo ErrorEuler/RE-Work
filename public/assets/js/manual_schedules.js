@@ -1018,12 +1018,13 @@ function showNotification(message, type = "success", duration = 5000) {
   }, duration);
 }
 
+// Enhanced autoFillCourseName with better messaging
 function autoFillCourseName(courseCode) {
   const courseNameInput = document.getElementById("course-name");
   if (!courseCode || !courseNameInput) return;
 
   const enteredCode = courseCode.trim().toUpperCase();
-  console.log("🔍 Looking up course:", enteredCode);
+  console.log("Looking up course:", enteredCode);
 
   // Clear previous warnings
   removeConflictWarning("course-code");
@@ -1035,33 +1036,28 @@ function autoFillCourseName(courseCode) {
   if (currentSemesterCourses[enteredCode]) {
     const course = currentSemesterCourses[enteredCode];
     courseNameInput.value = course.name;
-    console.log("✅ Found course:", course);
+    console.log("Found course:", course);
 
-    // Show success message with curriculum info
-    let message = `✅ Course found in ${course.curriculum_name}! Course name auto-filled.`;
-
-    // Add duplicate warning if applicable
-    if (course.has_duplicates) {
-      message += `\n⚠️ Note: This course exists in multiple curricula: ${course.duplicate_curricula.join(', ')}`;
-    }
-
+    // Show success message for valid course
     if (!conflict) {
-      displayConflictWarning("course-code", message, 'success');
+      displayConflictWarning("course-code",
+        "✅ Course found in curriculum! Course name auto-filled.",
+        'success'
+      );
     }
 
-    // Update section filter based on year level
     setTimeout(() => {
       filterSectionsByYearLevel();
       handleSectionChange();
     }, 100);
   } else {
-    console.log("❌ Course not found in any active curriculum");
+    console.log("Course not found in current semester");
     courseNameInput.value = "";
     resetSectionFilter();
 
     if (!conflict && enteredCode) {
       displayConflictWarning("course-code",
-        "🔍 Course not found in any active curriculum. Please verify the course code or check if the curriculum is active.",
+        "🔍 Course not found in current semester curriculum. Please verify the course code.",
         'warning'
       );
     }
@@ -1352,119 +1348,45 @@ function resetConflictStyles() {
 
 function buildCurrentSemesterCourseMappings() {
   currentSemesterCourses = {};
-  console.log("🔄 Building course mappings from ALL active curricula");
+  console.log("Building course mappings for current semester:", window.currentSemester);
   console.log("Available curriculum courses:", window.curriculumCourses);
 
   if (window.curriculumCourses && window.curriculumCourses.length > 0) {
-    console.log("✅ Using ALL curriculum courses:", window.curriculumCourses.length);
-
-    // Track curriculum distribution for logging
-    const curriculumDistribution = {};
-    const duplicateCourses = {}; // Track duplicate course codes
-
+    console.log("Using curriculum courses:", window.curriculumCourses.length);
     window.curriculumCourses.forEach((course) => {
       if (course.course_code && course.course_name) {
-        const courseKey = course.course_code.trim().toUpperCase();
-
-        // Track which curriculum this course came from
-        const curriculumId = course.curriculum_id;
-        const curriculumName = course.curriculum_name || `Curriculum ${curriculumId}`;
-
-        if (!curriculumDistribution[curriculumId]) {
-          curriculumDistribution[curriculumId] = {
-            name: curriculumName,
-            count: 0
-          };
-        }
-        curriculumDistribution[curriculumId].count++;
-
-        // Check if course code already exists
-        if (currentSemesterCourses[courseKey]) {
-          // Track duplicates
-          if (!duplicateCourses[courseKey]) {
-            duplicateCourses[courseKey] = [currentSemesterCourses[courseKey]];
-          }
-          duplicateCourses[courseKey].push(course);
-
-          console.log(`⚠️ Duplicate course code found: ${courseKey}`);
-          console.log(`   - Existing: ${currentSemesterCourses[courseKey].curriculum_name}`);
-          console.log(`   - New: ${curriculumName}`);
-        }
-
-        // Store course info - keep the most recent or merge info
-        // Priority: Use the course from the curriculum with 'Active' status
-        if (!currentSemesterCourses[courseKey] ||
-          (course.curriculum_status === 'Active' &&
-            currentSemesterCourses[courseKey].curriculum_status !== 'Active')) {
-
-          currentSemesterCourses[courseKey] = {
-            code: course.course_code,
-            name: course.course_name,
-            course_id: course.course_id,
-            year_level: course.curriculum_year,
-            semester: course.curriculum_semester,
-            units: course.units,
-            lecture_hours: course.lecture_hours,
-            lab_hours: course.lab_hours,
-            curriculum_id: curriculumId,
-            curriculum_name: curriculumName,
-            curriculum_status: course.curriculum_status || 'Active',
-            // Add duplicate info if exists
-            has_duplicates: false,
-            duplicate_curricula: []
-          };
-        }
+        currentSemesterCourses[course.course_code.trim().toUpperCase()] = {
+          code: course.course_code,
+          name: course.course_name,
+          course_id: course.course_id,
+          year_level: course.curriculum_year,
+          semester: course.curriculum_semester,
+          units: course.units,
+          lecture_hours: course.lecture_hours,
+          lab_hours: course.lab_hours,
+        };
       }
     });
 
-    // Mark courses with duplicates
-    Object.keys(duplicateCourses).forEach(courseKey => {
-      if (currentSemesterCourses[courseKey]) {
-        currentSemesterCourses[courseKey].has_duplicates = true;
-        currentSemesterCourses[courseKey].duplicate_curricula = duplicateCourses[courseKey].map(c => c.curriculum_name);
-      }
-    });
-
-    // Log curriculum distribution
-    console.log("📊 Course mappings built from multiple curricula:");
-    console.log(`   ✅ Total unique courses: ${Object.keys(currentSemesterCourses).length}`);
-    console.log("   📚 Curriculum distribution:");
-    Object.keys(curriculumDistribution).forEach(currId => {
-      console.log(`      - ${curriculumDistribution[currId].name}: ${curriculumDistribution[currId].count} courses`);
-    });
-
-    // Log duplicate courses summary
-    const duplicateCount = Object.keys(duplicateCourses).length;
-    if (duplicateCount > 0) {
-      console.log(`   ⚠️ Found ${duplicateCount} duplicate course codes across curricula`);
-    }
-
-    console.log("📝 Sample courses:", Object.values(currentSemesterCourses).slice(0, 3));
-
-    // Update the datalist
+    console.log("Course mappings built:", Object.keys(currentSemesterCourses).length, "unique courses");
+    console.log("Sample courses:", Object.values(currentSemesterCourses).slice(0, 3));
     updateCourseCodesDatalist();
   } else {
-    console.warn("❌ No curriculum courses found! Check if curriculum is set up correctly.");
-
-    // Fallback: Use schedules if available
+    console.warn("No curriculum courses found! Check if curriculum is set up correctly.");
     const currentSemesterId = window.currentSemester?.semester_id;
-    if (currentSemesterId && window.scheduleData && window.scheduleData.length > 0) {
-      const currentSemesterSchedules = window.scheduleData.filter(
-        (schedule) => schedule.semester_id == currentSemesterId
-      );
-      console.log("⚠️ Fallback: Using", currentSemesterSchedules.length, "schedules for current semester");
+    if (currentSemesterId) {
+      const currentSemesterSchedules = window.scheduleData.filter((schedule) => schedule.semester_id == currentSemesterId);
+      console.log("Fallback: Using", currentSemesterSchedules.length, "schedules for current semester");
 
       currentSemesterSchedules.forEach((schedule) => {
         if (schedule.course_code && schedule.course_name) {
-          const courseKey = schedule.course_code.trim().toUpperCase();
-          currentSemesterCourses[courseKey] = {
+          currentSemesterCourses[schedule.course_code.trim().toUpperCase()] = {
             code: schedule.course_code,
             name: schedule.course_name,
             course_id: schedule.course_id,
           };
         }
       });
-
       updateCourseCodesDatalist();
     }
   }
@@ -1472,97 +1394,20 @@ function buildCurrentSemesterCourseMappings() {
 
 function updateCourseCodesDatalist() {
   const courseCodesDatalist = document.getElementById("course-codes");
-  if (!courseCodesDatalist) {
-    console.error("❌ Course codes datalist not found!");
-    return;
-  }
+  if (!courseCodesDatalist) return;
 
   courseCodesDatalist.innerHTML = "";
-
-  // Group courses by curriculum for better organization
-  const coursesByCurriculum = {};
-
   Object.values(currentSemesterCourses).forEach((course) => {
-    const curriculumId = course.curriculum_id || 'default';
-    if (!coursesByCurriculum[curriculumId]) {
-      coursesByCurriculum[curriculumId] = {
-        name: course.curriculum_name || 'Default Curriculum',
-        courses: []
-      };
-    }
-    coursesByCurriculum[curriculumId].courses.push(course);
+    const option = document.createElement("option");
+    option.value = course.code;
+    option.setAttribute("data-name", course.name);
+    option.setAttribute("data-year-level", course.year_level || "");
+    option.setAttribute("data-course-id", course.course_id || "");
+    courseCodesDatalist.appendChild(option);
   });
 
-  console.log("📝 Updating datalist with courses from", Object.keys(coursesByCurriculum).length, "curricula");
-
-  // Add options - datalist doesn't support optgroup, but we can add curriculum info in the title
-  Object.keys(coursesByCurriculum).forEach(curriculumId => {
-    const curriculum = coursesByCurriculum[curriculumId];
-
-    curriculum.courses.forEach((course) => {
-      const option = document.createElement("option");
-      option.value = course.code;
-      option.setAttribute("data-name", course.name);
-      option.setAttribute("data-year-level", course.year_level || "");
-      option.setAttribute("data-course-id", course.course_id || "");
-      option.setAttribute("data-curriculum", course.curriculum_name || "");
-      option.setAttribute("data-curriculum-id", course.curriculum_id || "");
-      option.setAttribute("data-curriculum-status", course.curriculum_status || "Active");
-
-      // Build title with curriculum info and duplicate warning if applicable
-      let titleText = `${course.code} - ${course.name} (${course.curriculum_name || 'Curriculum'})`;
-      if (course.has_duplicates) {
-        titleText += ` ⚠️ Also in: ${course.duplicate_curricula.join(', ')}`;
-      }
-
-      option.title = titleText;
-      courseCodesDatalist.appendChild(option);
-    });
-  });
-
-  const totalOptions = courseCodesDatalist.children.length;
-  console.log(`✅ Updated course codes datalist: ${totalOptions} options from ${Object.keys(coursesByCurriculum).length} active curricula`);
-
-  // Log summary
-  Object.keys(coursesByCurriculum).forEach(currId => {
-    const curr = coursesByCurriculum[currId];
-    console.log(`   - ${curr.name}: ${curr.courses.length} courses`);
-  });
+  console.log("Updated course codes datalist with", courseCodesDatalist.children.length, "options");
 }
-
-function debugCurriculumData() {
-  console.log("=== CURRICULUM DATA DEBUG ===");
-  console.log("1. Raw curriculum courses count:", window.curriculumCourses?.length || 0);
-  console.log("2. Curricula available:", window.curricula?.length || 0);
-  console.log("3. Current semester courses mapped:", Object.keys(currentSemesterCourses).length);
-
-  if (window.curriculumCourses && window.curriculumCourses.length > 0) {
-    console.log("4. Sample curriculum course:", window.curriculumCourses[0]);
-
-    // Group by curriculum
-    const byCurriculum = {};
-    window.curriculumCourses.forEach(c => {
-      const currName = c.curriculum_name || 'Unknown';
-      if (!byCurriculum[currName]) byCurriculum[currName] = 0;
-      byCurriculum[currName]++;
-    });
-    console.log("5. Courses by curriculum:", byCurriculum);
-  } else {
-    console.warn("⚠️ No curriculum courses found in window.curriculumCourses");
-  }
-
-  if (window.curricula && window.curricula.length > 0) {
-    console.log("6. Active curricula:");
-    window.curricula.forEach(c => {
-      console.log(`   - ${c.curriculum_name} (Status: ${c.status})`);
-    });
-  }
-
-  console.log("=== END DEBUG ===");
-}
-
-// Call this function when page loads to verify data
-window.debugCurriculumData = debugCurriculumData;
 
 // Enhanced syncCourseName with conflict detection
 function syncCourseName() {

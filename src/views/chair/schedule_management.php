@@ -917,9 +917,7 @@ if ($userDepartmentId) {
                                 <option value="<?php echo htmlspecialchars($course['course_code']); ?>"
                                     data-name="<?php echo htmlspecialchars($course['course_name']); ?>"
                                     data-year-level="<?php echo htmlspecialchars($course['curriculum_year']); ?>"
-                                    data-course-id="<?php echo htmlspecialchars($course['course_id']); ?>"
-                                    data-curriculum="<?php echo htmlspecialchars($course['curriculum_name'] ?? ''); ?>"
-                                    data-curriculum-status="<?php echo htmlspecialchars($course['curriculum_status'] ?? 'Active'); ?>">
+                                    data-course-id="<?php echo htmlspecialchars($course['course_id']); ?>">
                                 <?php endforeach; ?>
                         </datalist>
                     </div>
