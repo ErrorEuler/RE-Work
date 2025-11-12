@@ -935,3 +935,16 @@ select.bg-red-50 {
     background-color: #fee2e2;
     border: 2px dashed #dc2626;
 }
+
+/* Add to your schedule_management.css */
+.tab-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+}
+
+.tab-button.disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    background-color: #f3f4f6 !important;
+    color: #9ca3af !important;
+}
