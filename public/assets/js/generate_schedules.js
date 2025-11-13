@@ -16,16 +16,16 @@ console.log("Department ID:", window.departmentId);
 function initializeScheduleData() {
   window.sectionsData = Array.isArray(window.rawSectionsData)
     ? window.rawSectionsData.map((s, index) => ({
-        section_id: s.section_id ?? index + 1,
-        section_name: s.section_name ?? "",
-        year_level: s.year_level ?? "Unknown",
-        academic_year: s.academic_year ?? window.currentAcademicYear,
-        current_students: s.current_students ?? 0,
-        max_students: s.max_students ?? 30,
-        semester: s.semester ?? "",
-        is_active: s.is_active ?? 1,
-        curriculum_id: s.curriculum_id || null,
-      }))
+      section_id: s.section_id ?? index + 1,
+      section_name: s.section_name ?? "",
+      year_level: s.year_level ?? "Unknown",
+      academic_year: s.academic_year ?? window.currentAcademicYear,
+      current_students: s.current_students ?? 0,
+      max_students: s.max_students ?? 30,
+      semester: s.semester ?? "",
+      is_active: s.is_active ?? 1,
+      curriculum_id: s.curriculum_id || null,
+    }))
     : [];
 
   console.log("Processed sections data:", window.sectionsData);
@@ -39,19 +39,19 @@ function initializeScheduleData() {
 
   window.curriculumCourses = Array.isArray(window.jsData?.curriculumCourses)
     ? window.jsData.curriculumCourses.map((c, index) => ({
-        course_id: c.course_id ?? index + 1,
-        course_code: c.course_code ?? "",
-        course_name: c.course_name ?? "Unknown",
-        year_level: c.curriculum_year ?? "Unknown",
-        semester:
-          c.curriculum_semester ?? window.currentSemester?.semester_name,
-        subject_type: c.subject_type ?? "",
-        units: c.units ?? 0,
-        lecture_units: c.lecture_units ?? 0,
-        lab_units: c.lab_units ?? 0,
-        lecture_hours: c.lecture_hours ?? 0,
-        lab_hours: c.lab_hours ?? 0,
-      }))
+      course_id: c.course_id ?? index + 1,
+      course_code: c.course_code ?? "",
+      course_name: c.course_name ?? "Unknown",
+      year_level: c.curriculum_year ?? "Unknown",
+      semester:
+        c.curriculum_semester ?? window.currentSemester?.semester_name,
+      subject_type: c.subject_type ?? "",
+      units: c.units ?? 0,
+      lecture_units: c.lecture_units ?? 0,
+      lab_units: c.lab_units ?? 0,
+      lecture_hours: c.lecture_hours ?? 0,
+      lab_hours: c.lab_hours ?? 0,
+    }))
     : [];
 
   console.log("Processed curriculum courses:", window.curriculumCourses);
@@ -126,36 +126,30 @@ function showCompletionToast(type, title, messages) {
   const toastContainer = getOrCreateToastContainer();
 
   const toast = document.createElement("div");
-  toast.className = `bg-${
-    type === "success" ? "green" : "yellow"
-  }-50 border border-${
-    type === "success" ? "green" : "yellow"
-  }-200 rounded-lg p-4 shadow-lg max-w-sm w-full transition-opacity duration-300`;
+  toast.className = `bg-${type === "success" ? "green" : "yellow"
+    }-50 border border-${type === "success" ? "green" : "yellow"
+    }-200 rounded-lg p-4 shadow-lg max-w-sm w-full transition-opacity duration-300`;
   toast.innerHTML = `
     <div class="flex items-start">
       <div class="flex-shrink-0">
-        <i class="fas ${
-          type === "success"
-            ? "fa-check-circle text-green-500"
-            : "fa-exclamation-triangle text-yellow-500"
-        } text-xl"></i>
+        <i class="fas ${type === "success"
+      ? "fa-check-circle text-green-500"
+      : "fa-exclamation-triangle text-yellow-500"
+    } text-xl"></i>
       </div>
       <div class="ml-3 flex-1">
-        <p class="text-sm font-medium ${
-          type === "success" ? "text-green-800" : "text-yellow-800"
-        }">${escapeHtml(title)}</p>
-        <ul class="list-disc pl-5 text-sm ${
-          type === "success" ? "text-green-700" : "text-yellow-700"
-        } mt-1">
+        <p class="text-sm font-medium ${type === "success" ? "text-green-800" : "text-yellow-800"
+    }">${escapeHtml(title)}</p>
+        <ul class="list-disc pl-5 text-sm ${type === "success" ? "text-green-700" : "text-yellow-700"
+    } mt-1">
           ${messages.map((msg) => `<li>${escapeHtml(msg)}</li>`).join("")}
         </ul>
       </div>
       <div class="ml-3 flex-shrink-0">
-        <button class="${
-          type === "success"
-            ? "text-green-400 hover:text-green-600"
-            : "text-yellow-400 hover:text-yellow-600"
-        }" onclick="this.parentElement.parentElement.parentElement.remove()">
+        <button class="${type === "success"
+      ? "text-green-400 hover:text-green-600"
+      : "text-yellow-400 hover:text-yellow-600"
+    }" onclick="this.parentElement.parentElement.parentElement.remove()">
           <i class="fas fa-times"></i>
         </button>
       </div>
@@ -240,21 +234,21 @@ function updateCourses() {
         coursesList.innerHTML = `
                 <ul class="list-disc pl-5 text-sm text-gray-700">
                     ${window.curriculumCourses
-                      .map(
-                        (course) => `
+            .map(
+              (course) => `
                                 <li>
                                     ${escapeHtml(
-                                      course.course_code
-                                    )} - ${escapeHtml(course.course_name)}
+                course.course_code
+              )} - ${escapeHtml(course.course_name)}
                                     (Year: ${escapeHtml(
-                                      course.curriculum_year
-                                    )}, Semester: ${escapeHtml(
-                          course.curriculum_semester
-                        )})
+                course.curriculum_year
+              )}, Semester: ${escapeHtml(
+                course.curriculum_semester
+              )})
                                 </li>
                             `
-                      )
-                      .join("")}
+            )
+            .join("")}
                 </ul>
             `;
       }
@@ -290,19 +284,17 @@ function updateScheduleCompletionStatus(data) {
         <div class="ml-3 flex-1">
           <h3 class="text-sm font-semibold text-yellow-800">Schedule Generation Incomplete</h3>
           <div class="mt-2 text-sm text-yellow-700">
-            <p class="mb-2">${
-              data.unassignedCourses.length
-            } course(s) could not be scheduled automatically:</p>
+            <p class="mb-2">${data.unassignedCourses.length
+      } course(s) could not be scheduled automatically:</p>
             <ul class="list-disc list-inside ml-2">
               ${data.unassignedCourses
-                .map((c) => `<li>${escapeHtml(c.course_code)}</li>`)
-                .join("")}
+        .map((c) => `<li>${escapeHtml(c.course_code)}</li>`)
+        .join("")}
             </ul>
             <p class="mt-3">
               <strong>Success Rate:</strong> ${data.successRate || "0%"} 
-              (${data.totalCourses - data.unassignedCourses.length} of ${
-      data.totalCourses
-    } courses scheduled)
+              (${data.totalCourses - data.unassignedCourses.length} of ${data.totalCourses
+      } courses scheduled)
             </p>
           </div>
           <div class="mt-3">
@@ -429,7 +421,7 @@ function generateSchedules() {
 
         // Step 2: Update UI asynchronously with proper sequencing
         updateUIAfterGeneration(responseData, loadingOverlay, startTime);
-          setTimeout(() => onSchedulesGenerated(), 500);
+        setTimeout(() => onSchedulesGenerated(), 500);
       } else {
         hideLoadingAndShowError(
           loadingOverlay,

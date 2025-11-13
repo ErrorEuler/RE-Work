@@ -621,20 +621,18 @@ function confirmDeleteAllSchedules() {
   // Close modal immediately
   closeDeleteModal();
 
-  // FIX: Send 'true' as string, backend expects this
   fetch("/chair/generate-schedules", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       action: "delete_schedules",
-      confirm: "true", // Changed from "1" to "true"
+      confirm: "true",
     }),
   })
     .then((response) => {
       console.log("Delete all response status:", response.status);
-      if (!response.ok)
-        throw new Error(`HTTP error! status: ${response.status}`);
-      return response.text(); // Get text first to see raw response
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return response.text();
     })
     .then((text) => {
       console.log("Delete all raw response:", text);
@@ -645,7 +643,9 @@ function confirmDeleteAllSchedules() {
         console.error("Failed to parse JSON:", e);
         throw new Error("Invalid JSON response: " + text.substring(0, 200));
       }
-
+      return data;
+    })
+    .then((data) => {
       console.log("Delete all response data:", data);
 
       // Hide loading
@@ -664,36 +664,59 @@ function confirmDeleteAllSchedules() {
           "success"
         );
 
-        // Clear schedule data
+        // ✅ CRITICAL FIX: Clear schedule data and update UI IMMEDIATELY
         window.scheduleData = [];
 
-        // Update displays
+        // ✅ Update ALL displays immediately
         safeUpdateScheduleDisplay([]);
 
-        // Rebuild course mappings
+        // ✅ Rebuild course mappings
         buildCurrentSemesterCourseMappings();
 
-        // Remove completion banner if exists
+        // ✅ Remove completion banner if exists
         const banner = document.getElementById("schedule-completion-banner");
         if (banner) {
           banner.remove();
         }
 
-        // Hide generation results
+        // ✅ Hide generation results
         const generationResults = document.getElementById("generation-results");
         if (generationResults) {
           generationResults.classList.add("hidden");
         }
 
-        // Reload after short delay
+        // ✅ Force UI refresh for all tabs
         setTimeout(() => {
-          location.reload();
-        }, 1500);
+          // Refresh manual grid
+          const manualGrid = document.getElementById("schedule-grid");
+          if (manualGrid) {
+            manualGrid.innerHTML = '';
+            // Rebuild the empty grid
+            updateManualGrid([]);
+          }
+
+          // Refresh view grid
+          const viewGrid = document.getElementById("timetableGrid");
+          if (viewGrid) {
+            viewGrid.innerHTML = '';
+            updateViewGrid([]);
+          }
+
+          // Refresh list view
+          const listView = document.getElementById("list-view");
+          if (listView) {
+            const tbody = listView.querySelector("tbody");
+            if (tbody) {
+              tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No schedules found</td></tr>';
+            }
+          }
+
+          console.log("✅ UI fully refreshed after deletion");
+        }, 100);
+
       } else {
         showNotification(
-          "Error: " +
-          (data.message || "Failed to delete all schedules") +
-          (data.debug ? "\n\nDebug: " + JSON.stringify(data.debug) : ""),
+          "Error: " + (data.message || "Failed to delete all schedules"),
           "error"
         );
       }
@@ -2355,11 +2378,90 @@ function formatTime(timeString) {
 
 // Enhanced safeUpdateScheduleDisplay for dynamic grid
 function safeUpdateScheduleDisplay(schedules) {
+  console.log("🔄 Updating schedule display with", schedules.length, "schedules");
+
   window.scheduleData = schedules;
 
   // Update both manual and view grids
   updateManualGrid(schedules);
   updateViewGrid(schedules);
+
+  // Also update list view if it exists
+  updateListView(schedules);
+}
+
+// Add this new function for list view updates
+function updateListView(schedules) {
+  const listView = document.getElementById("list-view");
+  if (!listView) return;
+
+  const tbody = listView.querySelector("tbody");
+  if (!tbody) return;
+
+  if (schedules.length === 0) {
+    tbody.innerHTML = `
+            <tr class="no-results-row">
+                <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-inbox text-3xl mb-2"></i>
+                    <p class="mt-2">No schedules found</p>
+                </td>
+            </tr>
+        `;
+    return;
+  }
+
+  // Rebuild the list view with current schedules
+  let html = '';
+  schedules.forEach(schedule => {
+    html += `
+            <tr class="hover:bg-gray-50 transition-colors duration-200 schedule-row"
+                data-schedule-id="${schedule.schedule_id}"
+                data-year-level="${schedule.year_level || ''}"
+                data-section-name="${schedule.section_name || ''}"
+                data-room-name="${schedule.room_name || 'Online'}">
+                <td class="px-4 py-3 text-sm text-gray-900 font-medium">
+                    ${escapeHtml(schedule.course_code)}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                    ${escapeHtml(schedule.section_name)}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                    ${escapeHtml(schedule.year_level)}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                    ${escapeHtml(schedule.faculty_name)}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                    ${escapeHtml(schedule.day_of_week)}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                    ${schedule.start_time ? formatTime(schedule.start_time.substring(0, 5)) : ''} - ${schedule.end_time ? formatTime(schedule.end_time.substring(0, 5)) : ''}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-700">
+                    ${escapeHtml(schedule.room_name || 'Online')}
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <div class="flex space-x-2 justify-center">
+                        <button onclick="editSchedule('${schedule.schedule_id}')" class="text-yellow-600 hover:text-yellow-700 text-sm no-print">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="openDeleteSingleModal(
+                            '${schedule.schedule_id}', 
+                            '${escapeHtml(schedule.course_code)}', 
+                            '${escapeHtml(schedule.section_name)}', 
+                            '${escapeHtml(schedule.day_of_week)}', 
+                            '${schedule.start_time ? formatTime(schedule.start_time.substring(0, 5)) : ''}', 
+                            '${schedule.end_time ? formatTime(schedule.end_time.substring(0, 5)) : ''}'
+                        )" class="text-red-600 hover:text-red-700 text-sm no-print">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+  });
+
+  tbody.innerHTML = html;
 }
 
 function updateManualGrid(schedules) {
@@ -2809,4 +2911,79 @@ function syncGridWithSchedules(schedules) {
   });
 
   initializeDragAndDrop();
+}
+
+
+// Initialize real-time schedule updates
+function initializeScheduleManager() {
+  console.log('🔄 Initializing real-time schedule manager...');
+
+  // Initialize with existing data
+  window.scheduleManager.initialize(window.scheduleData || []);
+
+  // Listen for schedule updates
+  window.scheduleManager.addListener((schedules) => {
+    console.log('📢 Schedule update received:', schedules.length, 'schedules');
+
+    // Update the global variable for compatibility
+    window.scheduleData = schedules;
+
+    // Update the UI immediately
+    safeUpdateScheduleDisplay(schedules);
+
+    // Re-initialize drag and drop
+    setTimeout(() => {
+      initializeDragAndDrop();
+    }, 100);
+
+    // Update filters and other UI elements
+    updateFilters();
+    updateScheduleCount();
+  });
+}
+
+// Update filters based on current schedules
+function updateFilters() {
+  const schedules = window.scheduleManager.getSchedules();
+
+  // Update year level filter
+  const yearFilter = document.getElementById('filter-year-manual');
+  if (yearFilter) {
+    const yearLevels = [...new Set(schedules.map(s => s.year_level))].filter(Boolean);
+    // Update options if needed
+  }
+
+  // Update section filter
+  const sectionFilter = document.getElementById('filter-section-manual');
+  if (sectionFilter) {
+    const sections = [...new Set(schedules.map(s => s.section_name))].filter(Boolean);
+    // Update options if needed
+  }
+
+  // Update room filter
+  const roomFilter = document.getElementById('filter-room-manual');
+  if (roomFilter) {
+    const rooms = [...new Set(schedules.map(s => s.room_name || 'Online'))].filter(Boolean);
+    // Update options if needed
+  }
+}
+
+// Update schedule count display
+function updateScheduleCount() {
+  const count = window.scheduleManager.getScheduleCount();
+  const countElement = document.getElementById('schedule-count');
+
+  if (!countElement) {
+    // Create count element if it doesn't exist
+    const header = document.querySelector('#content-manual h2');
+    if (header) {
+      const countElement = document.createElement('span');
+      countElement.id = 'schedule-count';
+      countElement.className = 'ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-sm rounded-full';
+      countElement.textContent = `${count} schedules`;
+      header.appendChild(countElement);
+    }
+  } else {
+    countElement.textContent = `${count} schedules`;
+  }
 }
